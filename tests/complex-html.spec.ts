@@ -67,6 +67,16 @@ test('complex document indexes a deep DOM with unique editor IDs', async ({ page
   expect(new Set(ids).size).toBe(ids.length);
 });
 
+test('element tree includes iframe descendants below body', async ({ page }) => {
+  await uploadComplex(page);
+  const tree = page.locator('aside').filter({ hasText: 'Elements' }).first();
+  await expect(tree.getByText('body', { exact: true })).toBeVisible();
+  await expect(tree.getByText('header', { exact: true })).toBeVisible();
+  await expect(tree.getByText('main', { exact: true })).toBeVisible();
+  await expect(tree.getByText('section', { exact: true }).first()).toBeVisible();
+  await expect(tree.getByText('h1', { exact: true })).toBeVisible();
+});
+
 test('sandbox blocks uploaded script and inline event handler', async ({ page }) => {
   const frame = await uploadComplex(page);
   expect(await frame.locator('body').evaluate(() => (window as typeof window & { __scriptRan?: boolean }).__scriptRan)).toBeUndefined();
