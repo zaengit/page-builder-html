@@ -50,11 +50,7 @@ const complexHtml = `<!DOCTYPE html>
 
 async function uploadComplex(page: Page) {
   await page.goto('./');
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'complex.html',
-    mimeType: 'text/html',
-    buffer: Buffer.from(complexHtml),
-  });
+  await page.locator('input[type="file"]').setInputFiles({name:'complex.html',mimeType:'text/html',buffer:Buffer.from(complexHtml)});
   const frame = page.frameLocator('iframe[title="HTML canvas"]');
   await expect(frame.locator('#hero-title')).toBeVisible();
   return frame;
@@ -67,14 +63,13 @@ test('complex document indexes a deep DOM with unique editor IDs', async ({ page
   expect(new Set(ids).size).toBe(ids.length);
 });
 
-test('element tree includes iframe descendants below body', async ({ page }) => {
+test('elements panel exposes grouped insertion tabs', async ({ page }) => {
   await uploadComplex(page);
-  const tree = page.locator('aside').filter({ hasText: 'Elements' }).first();
-  await expect(tree.getByText('body', { exact: true })).toBeVisible();
-  await expect(tree.getByText('header', { exact: true })).toBeVisible();
-  await expect(tree.getByText('main', { exact: true })).toBeVisible();
-  await expect(tree.getByText('section', { exact: true }).first()).toBeVisible();
-  await expect(tree.getByText('h1', { exact: true })).toBeVisible();
+  const panel=page.locator('aside').filter({hasText:'Elements'}).first();
+  for(const label of ['Layout','Content','Media','Interactive','Embed','Semantic'])await expect(panel.getByRole('tab',{name:label})).toBeVisible();
+  await panel.getByRole('tab',{name:'Content'}).click();
+  await expect(panel.getByTitle('Insert Heading 1')).toBeVisible();
+  await expect(panel.getByTitle('Insert Paragraph')).toBeVisible();
 });
 
 test('sandbox blocks uploaded script and inline event handler', async ({ page }) => {
@@ -128,7 +123,7 @@ test('form submit is prevented inside sandboxed editor', async ({ page }) => {
   expect(page.url()).not.toContain('example.com/submit');
 });
 
-test('tree and canvas selections remain synchronized on complex nested element', async ({ page }) => {
+test('canvas selection remains synchronized with properties on complex nested element', async ({ page }) => {
   const frame = await uploadComplex(page);
   await frame.locator('#hero-title').click();
   await expect(page.getByText('<h1> · heading')).toBeVisible();
