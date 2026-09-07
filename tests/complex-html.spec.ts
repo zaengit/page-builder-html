@@ -96,7 +96,8 @@ test('editing complex direct text preserves nested strong and heading nodes', as
 
 test('duplicate and reorder complex cards keeps DOM mapping unique', async ({ page }) => {
   const frame = await uploadComplex(page);
-  await frame.locator('#card-b').click();
+  await frame.locator('#card-b').click({ position: { x: 6, y: 6 } });
+  await expect(page.getByText('<article> · container')).toBeVisible();
   await page.getByTitle('Duplicate').click();
   await expect(frame.locator('#features > article')).toHaveCount(4);
   let ids = await frame.locator('[data-vpb-id]').evaluateAll(nodes => nodes.map(n => n.getAttribute('data-vpb-id')));
@@ -122,7 +123,7 @@ test('tree and canvas selections remain synchronized on complex nested element',
 
 test('complex export preserves document content and removes editor metadata', async ({ page }) => {
   const frame = await uploadComplex(page);
-  await frame.locator('#card-a').click();
+  await frame.locator('#card-a').click({ position: { x: 6, y: 6 } });
   await page.getByTitle('Duplicate').click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export HTML/i }).click();
