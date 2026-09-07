@@ -23,4 +23,19 @@ export function indexDocument(doc:Document){
   }
 }
 export const byId=(doc:Document,id:string|null)=>id?doc.querySelector<HTMLElement>(`[${ID}="${CSS.escape(id)}"]`):null;
-export function buildTree(doc:Document):TreeNode[]{const walk=(el:HTMLElement):TreeNode=>{const id=el.getAttribute(ID)!;const text=[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent?.trim()).join(' ').slice(0,24);return{id,tag:el.tagName.toLowerCase(),label:text||el.id||el.classList[0]||'',children:[...el.children].filter((x):x is HTMLElement=>x instanceof HTMLElement).map(walk)}};return doc.body?[walk(doc.body)]:[]}
+export function buildTree(doc:Document):TreeNode[]{
+  const walk=(el:Element):TreeNode=>{
+    const id=el.getAttribute(ID)!;
+    const text=[...el.childNodes].filter(n=>n.nodeType===Node.TEXT_NODE).map(n=>n.textContent?.trim()).filter(Boolean).join(' ').slice(0,24);
+    const classLabel=el.getAttribute('class')?.trim().split(/\s+/)[0]||'';
+    return{
+      id,
+      tag:el.tagName.toLowerCase(),
+      label:text||el.id||classLabel,
+      // Do not use `instanceof HTMLElement` here: iframe elements belong to a
+      // different Window/realm and fail instanceof checks against the parent.
+      children:Array.from(el.children).map(walk)
+    };
+  };
+  return doc.body?[walk(doc.body)]:[];
+}
