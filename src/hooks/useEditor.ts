@@ -17,6 +17,8 @@ export function useEditor():EditorContextValue{
   const[analysis,setAnalysis]=useState<ElementAnalysis|null>(null);
   const[tree,setTree]=useState<TreeNode[]>([]);
   const[device,setDeviceState]=useState<Device>(initialDraft?.device||'desktop');
+  const[hasCopiedBlock,setHasCopiedBlock]=useState(false);
+  const copiedBlock=useRef<string>('');
   const[,tick]=useState(0);
   const saveTimer=useRef<number|null>(null);
   const doc=()=>iframeRef.current?.contentDocument||null;
@@ -84,6 +86,8 @@ export function useEditor():EditorContextValue{
     setSelectedId(null);
     setAnalysis(null);
     setTree([]);
+    copiedBlock.current='';
+    setHasCopiedBlock(false);
     history.reset({html:text,selectedId:null});
     saveDraft({html:text,fileName:f.name,device});
   };
@@ -115,6 +119,33 @@ export function useEditor():EditorContextValue{
     setSelectedId(c.getAttribute(ID));
   });
 
+  const copyBlock=()=>{
+    const d=doc(),el=d&&byId(d,selectedId);
+    if(!el)return;
+    const clone=el.cloneNode(true)as HTMLElement;
+    clone.removeAttribute(ID);
+    clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));
+    clone.removeAttribute('data-vpb-selected');
+    clone.removeAttribute('data-vpb-hover');
+    clone.querySelectorAll('[data-vpb-selected],[data-vpb-hover]').forEach(x=>{x.removeAttribute('data-vpb-selected');x.removeAttribute('data-vpb-hover')});
+    copiedBlock.current=clone.outerHTML;
+    setHasCopiedBlock(true);
+  };
+
+  const pasteBlock=(where:'before'|'after')=>{
+    const d=doc(),target=d&&byId(d,selectedId);
+    if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;
+    mutate(el=>{
+      const template=d.createElement('template');
+      template.innerHTML=copiedBlock.current.trim();
+      const clone=template.content.firstElementChild as HTMLElement|null;
+      if(!clone)return;
+      if(where==='before')el.before(clone);else el.after(clone);
+      indexDocument(d);
+      setSelectedId(clone.getAttribute(ID));
+    });
+  };
+
   const remove=()=>mutate(el=>{if(deleteElement(el))setSelectedId(null)});
   const move=(dir:-1|1)=>mutate(el=>moveElement(el,dir));
   const undo=()=>restore(history.undo());
@@ -127,5 +158,5 @@ export function useEditor():EditorContextValue{
     if(currentHtml)saveDraft({html:currentHtml,fileName,device:next});
   };
 
-  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,loadFile,select,setDevice,mutate,duplicate,remove,move,undo,redo,exportHtml,refresh};
+  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
 }
