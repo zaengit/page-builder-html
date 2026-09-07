@@ -120,7 +120,12 @@ export function useEditor():EditorContextValue{
   const undo=()=>restore(history.undo());
   const redo=()=>restore(history.redo());
   const exportHtml=()=>{const d=doc();if(d)downloadHtml(serialize(d),fileName)};
-  const setDevice=(next:Device)=>{setDeviceState(next);setTimeout(queueAutosave)};
+  const setDevice=(next:Device)=>{
+    setDeviceState(next);
+    const d=doc();
+    const currentHtml=d?serialize(d):html;
+    if(currentHtml)saveDraft({html:currentHtml,fileName,device:next});
+  };
 
   return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,loadFile,select,setDevice,mutate,duplicate,remove,move,undo,redo,exportHtml,refresh};
 }
