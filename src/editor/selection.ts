@@ -1,0 +1,4 @@
+import type{TreeNode}from'../types/editor';let seq=0;export const ID='data-vpb-id';
+export function indexDocument(doc:Document){seq=0;doc.querySelectorAll<HTMLElement>('body,body *').forEach(el=>{if(!el.hasAttribute(ID))el.setAttribute(ID,`vpb-${++seq}`)});}
+export const byId=(doc:Document,id:string|null)=>id?doc.querySelector<HTMLElement>(`[${ID}="${CSS.escape(id)}"]`):null;
+export function buildTree(doc:Document):TreeNode[]{const walk=(el:HTMLElement):TreeNode=>{const id=el.getAttribute(ID)!;const text=[...el.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent?.trim()).join(' ').slice(0,24);return{id,tag:el.tagName.toLowerCase(),label:text||el.id||el.classList[0]||'',children:[...el.children].filter((x):x is HTMLElement=>x instanceof HTMLElement).map(walk)}};return doc.body?[walk(doc.body)]:[]}
