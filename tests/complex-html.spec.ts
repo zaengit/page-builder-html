@@ -84,11 +84,15 @@ test('sandbox blocks uploaded script and inline event handler', async ({ page })
   expect(await frame.locator('body').evaluate(() => (window as typeof window & { __inlineRan?: boolean }).__inlineRan)).toBeUndefined();
 });
 
-test('detects background-image container capability', async ({ page }) => {
+test('background-image container can be selected and edited through universal CSS', async ({ page }) => {
   const frame = await uploadComplex(page);
   await frame.locator('#hero').click({ position: { x: 20, y: 20 } });
   await expect(page.getByText('<section> · container')).toBeVisible();
-  await expect(page.getByText('Background', { exact: true })).toBeVisible();
+  await expect(page.getByText('Element CSS', { exact: true })).toBeVisible();
+  const css=page.getByLabel('Element CSS');
+  await css.fill('background-color: rgb(1, 2, 3); padding: 20px;');
+  await page.getByRole('button',{name:'Apply CSS'}).click();
+  await expect(frame.locator('#hero')).toHaveCSS('background-color','rgb(1, 2, 3)');
 });
 
 test('editing complex direct text preserves nested strong and heading nodes', async ({ page }) => {
