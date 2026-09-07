@@ -6,10 +6,33 @@ async function upload(page:any){await page.goto('./');await page.locator('input[
 
 test.use({viewport:{width:390,height:844}});
 
-test('mobile layout keeps canvas visible and sidebars off-canvas',async({page})=>{await page.goto('./');await expect(page.getByText('Elements',{exact:true})).toBeVisible();await expect(page.locator('aside').filter({hasText:'Elements'}).first()).toBeHidden();await expect(page.locator('main')).toBeVisible();});
+test('mobile layout keeps canvas visible and sidebars off-canvas',async({page})=>{
+  await page.goto('./');
+  await expect(page.getByRole('button',{name:'Elements'})).toBeVisible();
+  await expect(page.locator('aside').filter({hasText:'Elements'}).first()).toBeHidden();
+  await expect(page.locator('main')).toBeVisible();
+});
 
-test('mobile Elements drawer opens and closes',async({page})=>{await upload(page);await page.getByRole('button',{name:'Elements'}).click();const drawer=page.locator('aside').filter({hasText:'Elements'}).last();await expect(drawer).toBeVisible();await page.getByRole('button',{name:'Close panel'}).click();await expect(drawer).toBeHidden();});
+test('mobile Elements drawer opens and closes',async({page})=>{
+  await upload(page);
+  await page.getByRole('button',{name:'Elements'}).click();
+  const drawer=page.locator('aside').filter({hasText:'Elements'}).last();
+  await expect(drawer).toBeVisible();
+  await page.getByRole('button',{name:'Close panel'}).click();
+  await expect(drawer).toBeHidden();
+});
 
-test('mobile Properties drawer edits selected element',async({page})=>{await upload(page);const frame=page.frameLocator('iframe[title="HTML canvas"]');await frame.locator('#title').click();await page.getByRole('button',{name:'Properties'}).click();await expect(page.getByText('<h1> · heading')).toBeVisible();});
+test('mobile Properties drawer edits selected element',async({page})=>{
+  await upload(page);
+  const frame=page.frameLocator('iframe[title="HTML canvas"]');
+  await frame.locator('#title').click();
+  await page.getByRole('button',{name:'Properties'}).click();
+  const drawer=page.locator('aside').filter({hasText:'Properties'}).last();
+  await expect(drawer.getByText('<h1> · heading')).toBeVisible();
+});
 
-test('toolbar does not force page horizontal overflow on mobile',async({page})=>{await page.goto('./');const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth);expect(overflow).toBeFalsy();});
+test('toolbar does not force page horizontal overflow on mobile',async({page})=>{
+  await page.goto('./');
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>document.documentElement.clientWidth);
+  expect(overflow).toBeFalsy();
+});
