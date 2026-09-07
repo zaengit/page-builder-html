@@ -17,11 +17,7 @@ const fixture = `<!DOCTYPE html>
 
 async function upload(page: Page) {
   await page.goto('./');
-  await page.locator('input[type="file"]').setInputFiles({
-    name: 'fixture.html',
-    mimeType: 'text/html',
-    buffer: Buffer.from(fixture),
-  });
+  await page.locator('input[type="file"]').setInputFiles({name:'fixture.html',mimeType:'text/html',buffer:Buffer.from(fixture)});
   const frame = page.frameLocator('iframe[title="HTML canvas"]');
   await expect(frame.locator('#title')).toBeVisible();
   return frame;
@@ -61,6 +57,40 @@ test('copies selected block and pastes after another block with unique editor ID
   await frame.locator('#target').click({position:{x:4,y:4}});
   await page.getByTitle('Paste after').click();
   await expect(frame.locator('main > div#card')).toHaveCount(2);
+  const ids=await frame.locator('[data-vpb-id]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-vpb-id')));
+  expect(new Set(ids).size).toBe(ids.length);
+});
+
+test('inserts catalog elements before, inside, and after selection', async ({ page }) => {
+  const frame=await upload(page);
+  const panel=page.locator('aside').filter({hasText:'Elements'}).first();
+  await frame.locator('#target').click({position:{x:4,y:4}});
+  await panel.getByRole('tab',{name:'Content'}).click();
+  await panel.getByRole('button',{name:'Before'}).click();
+  await panel.getByTitle('Insert Paragraph').click();
+  await expect(frame.locator('#target').locator('xpath=preceding-sibling::*[1]')).toHaveText('Paragraph');
+
+  await frame.locator('#target').click({position:{x:4,y:4}});
+  await panel.getByRole('button',{name:'Inside'}).click();
+  await panel.getByTitle('Insert Heading 2').click();
+  await expect(frame.locator('#target > h2')).toHaveText('Heading 2');
+
+  await frame.locator('#target').click({position:{x:4,y:4}});
+  await panel.getByRole('button',{name:'After'}).click();
+  await panel.getByTitle('Insert Text').click();
+  await expect(frame.locator('#target').locator('xpath=following-sibling::*[1]')).toHaveText('Text');
+});
+
+test('HTML Embed inserts raw nested HTML and reindexes editor IDs', async ({ page }) => {
+  const frame=await upload(page);
+  await frame.locator('#target').click({position:{x:4,y:4}});
+  const panel=page.locator('aside').filter({hasText:'Elements'}).first();
+  await panel.getByRole('tab',{name:'Embed'}).click();
+  await panel.getByTitle('Insert HTML Embed').click();
+  const editor=panel.locator('textarea');
+  await editor.fill('<article id="embedded"><h3>Embedded title</h3><p>Nested content</p></article>');
+  await panel.getByRole('button',{name:'Insert HTML'}).click();
+  await expect(frame.locator('#target > #embedded h3')).toHaveText('Embedded title');
   const ids=await frame.locator('[data-vpb-id]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-vpb-id')));
   expect(new Set(ids).size).toBe(ids.length);
 });
