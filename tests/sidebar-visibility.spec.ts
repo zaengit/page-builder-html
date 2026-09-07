@@ -1,0 +1,5 @@
+import{expect,test}from'@playwright/test';
+
+test.use({viewport:{width:1440,height:900}});
+
+test('desktop sidebars can be hidden and shown independently',async({page})=>{await page.goto('./');const elements=page.locator('aside').filter({hasText:'Elements'}).first();const properties=page.locator('aside').filter({hasText:'Properties'}).first();await expect(elements).toBeVisible();await expect(properties).toBeVisible();await page.getByTitle('Hide Elements sidebar').click();await expect(elements).toBeHidden();await expect(page.getByTitle('Show Elements sidebar')).toBeVisible();await page.getByTitle('Hide Properties sidebar').click();await expect(properties).toBeHidden();await expect(page.getByTitle('Show Properties sidebar')).toBeVisible();await expect(page.locator('main')).toBeVisible();await page.getByTitle('Show Elements sidebar').click();await page.getByTitle('Show Properties sidebar').click();await expect(page.locator('aside').filter({hasText:'Elements'}).first()).toBeVisible();await expect(page.locator('aside').filter({hasText:'Properties'}).first()).toBeVisible();});
