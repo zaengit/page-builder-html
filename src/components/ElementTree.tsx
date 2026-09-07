@@ -3,6 +3,8 @@ import{Box,ChevronRight,Columns3,FileCode2,Heading1,Image,LayoutGrid,MousePointe
 import{elementCatalog,elementGroups,type ElementGroup}from'../editor/elementCatalog';
 import type{EditorContextValue,InsertPosition,TreeNode}from'../types/editor';
 
+export const ELEMENT_DRAG_TYPE='application/x-vpb-element';
+
 const icons:Record<ElementGroup,typeof Box>={layout:LayoutGrid,content:Type,media:Image,interactive:MousePointerClick,embed:FileCode2,semantic:PanelTop};
 const itemIcons:Record<string,typeof Box>={section:PanelTop,container:Box,flex:Rows3,row:Rows3,column:Columns3,grid:LayoutGrid,text:Type,paragraph:Type,h1:Heading1,h2:Heading1,h3:Heading1,h4:Heading1,h5:Heading1,h6:Heading1,image:Image,html:FileCode2};
 const positions:{id:InsertPosition;label:string}[]=[{id:'inside',label:'Inside'},{id:'before',label:'Before'},{id:'after',label:'After'}];
@@ -36,6 +38,12 @@ export function ElementTree({e,className=''}:{e:EditorContextValue;className?:st
 
   const insert=(id:string)=>{if(id==='html'){setEmbedOpen(true);return}e.insertElement(id,position)};
   const insertHtml=()=>{if(!snippet.trim())return;e.insertHtml(snippet,position);setEmbedOpen(false)};
+  const startDrag=(ev:React.DragEvent<HTMLButtonElement>,id:string)=>{
+    if(id==='html'){ev.preventDefault();return}
+    ev.dataTransfer.effectAllowed='copy';
+    ev.dataTransfer.setData(ELEMENT_DRAG_TYPE,id);
+    ev.dataTransfer.setData('text/plain',id);
+  };
 
   return <aside className={`relative w-64 shrink-0 overflow-auto border-r border-zinc-800 bg-zinc-950 ${className}`}>
     <div className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950 p-3">
@@ -60,9 +68,9 @@ export function ElementTree({e,className=''}:{e:EditorContextValue;className?:st
     </div>
 
     {mainTab==='insert'?<div className="p-3">
-      <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">{query?`${items.length} results`:elementGroups.find(x=>x.id===group)?.label}</span><span className="text-[10px] text-zinc-700">Insert {position}</span></div>
+      <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">{query?`${items.length} results`:elementGroups.find(x=>x.id===group)?.label}</span><span className="text-[10px] text-zinc-700">Drag or insert {position}</span></div>
       <div className="grid grid-cols-2 gap-2">
-        {items.map(item=>{const I=itemIcons[item.id]||Box;return <button key={item.id} onClick={()=>insert(item.id)} title={`Insert ${item.label}`} className="flex min-h-16 flex-col items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2 py-3 text-center text-xs text-zinc-300 transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"><I size={18}/><span>{item.label}</span>{query&&<span className="text-[9px] uppercase tracking-wide text-zinc-600">{item.group}</span>}</button>})}
+        {items.map(item=>{const I=itemIcons[item.id]||Box;return <button key={item.id} draggable={item.id!=='html'} onDragStart={ev=>startDrag(ev,item.id)} onClick={()=>insert(item.id)} title={`Insert ${item.label}`} className="flex min-h-16 cursor-grab flex-col items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 px-2 py-3 text-center text-xs text-zinc-300 transition hover:border-blue-500/50 hover:bg-blue-500/10 hover:text-white active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-blue-500/40"><I size={18}/><span>{item.label}</span>{query&&<span className="text-[9px] uppercase tracking-wide text-zinc-600">{item.group}</span>}</button>})}
       </div>
       {query&&items.length===0&&<div className="rounded-md border border-dashed border-zinc-800 p-5 text-center text-xs text-zinc-600">No elements found.</div>}
       {!e.html&&<p className="mt-4 rounded-md border border-zinc-800 bg-zinc-900/50 p-3 text-[11px] leading-5 text-zinc-500">Upload HTML first. New elements are inserted relative to the selected block.</p>}
