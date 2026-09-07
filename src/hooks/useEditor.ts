@@ -3,10 +3,11 @@ import{analyzeElement}from'../editor/elementAnalyzer';
 import{buildTree,byId,indexDocument,ID}from'../editor/selection';
 import{deleteElement,duplicateElement,moveElement}from'../editor/mutations';
 import{createCatalogElement}from'../editor/elementCatalog';
+import{insertNode,parseHtmlSnippet}from'../editor/insertion';
 import{downloadHtml,serialize}from'../editor/serializer';
 import{loadDraft,saveDraft}from'../editor/storage';
 import{useHistory}from'./useHistory';
-import type{Device,EditorContextValue,TreeNode,ElementAnalysis}from'../types/editor';
+import type{Device,EditorContextValue,TreeNode,ElementAnalysis,InsertPosition}from'../types/editor';
 
 export function useEditor():EditorContextValue{
   const iframeRef=useRef<HTMLIFrameElement>(null);
@@ -65,19 +66,28 @@ export function useEditor():EditorContextValue{
 
   const mutate=(fn:(el:HTMLElement)=>void)=>{const d=doc(),el=d&&byId(d,selectedId);if(!el)return;const before=snap();if(before)history.push(before);fn(el);const after=snap();if(after)history.push(after);refresh();queueAutosave()};
 
-  const insertElement=(kind:string)=>{
+  const finishInsert=(d:Document,node:HTMLElement|null)=>{
+    indexDocument(d);
+    if(node)setSelectedId(node.getAttribute(ID));
+    const after=snap();if(after)history.push(after);
+    setTimeout(()=>{refresh();queueAutosave();node?.scrollIntoView({block:'center',behavior:'smooth'})});
+  };
+
+  const insertElement=(kind:string,position:InsertPosition='inside')=>{
     const d=doc();if(!d||!d.body)return;
     const before=snap();if(before)history.push(before);
     const node=createCatalogElement(d,kind);if(!node)return;
-    const target=byId(d,selectedId);
-    const voidTags=new Set(['AREA','BASE','BR','COL','EMBED','HR','IMG','INPUT','LINK','META','PARAM','SOURCE','TRACK','WBR','IFRAME']);
-    if(target&&target!==d.body&&!voidTags.has(target.tagName))target.appendChild(node);
-    else if(target&&target!==d.body)target.after(node);
-    else d.body.appendChild(node);
-    indexDocument(d);
-    setSelectedId(node.getAttribute(ID));
-    const after=snap();if(after)history.push(after);
-    setTimeout(()=>{refresh();queueAutosave();node.scrollIntoView({block:'center',behavior:'smooth'})});
+    insertNode(d,byId(d,selectedId),node,position);
+    finishInsert(d,node);
+  };
+
+  const insertHtml=(snippet:string,position:InsertPosition='inside')=>{
+    const d=doc();if(!d||!d.body||!snippet.trim())return;
+    const before=snap();if(before)history.push(before);
+    const{fragment,firstElement}=parseHtmlSnippet(d,snippet);
+    if(!fragment.childNodes.length)return;
+    insertNode(d,byId(d,selectedId),fragment,position);
+    finishInsert(d,firstElement);
   };
 
   const duplicate=()=>mutate(el=>{const c=duplicateElement(el);c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));c.removeAttribute(ID);indexDocument(el.ownerDocument);setSelectedId(c.getAttribute(ID))});
@@ -89,5 +99,5 @@ export function useEditor():EditorContextValue{
   const exportHtml=()=>{const d=doc();if(d)downloadHtml(serialize(d),fileName)};
   const setDevice=(next:Device)=>{setDeviceState(next);const d=doc();const currentHtml=d?serialize(d):html;if(currentHtml)saveDraft({html:currentHtml,fileName,device:next})};
 
-  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,insertElement,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
+  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,insertElement,insertHtml,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
 }
