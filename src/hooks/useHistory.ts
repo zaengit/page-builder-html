@@ -1,0 +1,1 @@
+import{useRef}from'react';import{History}from'../editor/history';export function useHistory(){return useRef(new History()).current}
