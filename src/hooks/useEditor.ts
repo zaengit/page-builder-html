@@ -2,6 +2,7 @@ import{useCallback,useEffect,useRef,useState}from'react';
 import{analyzeElement}from'../editor/elementAnalyzer';
 import{buildTree,byId,indexDocument,ID}from'../editor/selection';
 import{deleteElement,duplicateElement,moveElement}from'../editor/mutations';
+import{createCatalogElement}from'../editor/elementCatalog';
 import{downloadHtml,serialize}from'../editor/serializer';
 import{loadDraft,saveDraft}from'../editor/storage';
 import{useHistory}from'./useHistory';
@@ -47,116 +48,46 @@ export function useEditor():EditorContextValue{
     },350);
   },[persistNow]);
 
-  useEffect(()=>{
-    if(initialDraft?.html)history.reset({html:initialDraft.html,selectedId:null});
-  },[]);
-
+  useEffect(()=>{if(initialDraft?.html)history.reset({html:initialDraft.html,selectedId:null})},[]);
   useEffect(()=>{
     const flush=()=>persistNow();
     const visibility=()=>{if(document.visibilityState==='hidden')flush()};
     window.addEventListener('pagehide',flush);
     document.addEventListener('visibilitychange',visibility);
-    return()=>{
-      window.removeEventListener('pagehide',flush);
-      document.removeEventListener('visibilitychange',visibility);
-      if(saveTimer.current!==null)window.clearTimeout(saveTimer.current);
-    };
+    return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',visibility);if(saveTimer.current!==null)window.clearTimeout(saveTimer.current)};
   },[persistNow]);
 
-  const snap=()=>{
-    const d=doc();
-    return d?{html:d.documentElement.outerHTML,selectedId}:null;
-  };
+  const snap=()=>{const d=doc();return d?{html:d.documentElement.outerHTML,selectedId}:null};
+  const restore=(s:{html:string;selectedId:string|null}|null)=>{const d=doc();if(!d||!s)return;d.open();d.write(s.html);d.close();indexDocument(d);setSelectedId(s.selectedId);setTimeout(()=>{refresh();queueAutosave()})};
 
-  const restore=(s:{html:string;selectedId:string|null}|null)=>{
-    const d=doc();
-    if(!d||!s)return;
-    d.open();
-    d.write(s.html);
-    d.close();
+  const loadFile=async(f:File)=>{const text=await f.text();setHtml(text);setFileName(f.name);setSelectedId(null);setAnalysis(null);setTree([]);copiedBlock.current='';setHasCopiedBlock(false);history.reset({html:text,selectedId:null});saveDraft({html:text,fileName:f.name,device})};
+  const select=(id:string|null)=>{setSelectedId(id);const d=doc();const el=d&&byId(d,id);setAnalysis(el?analyzeElement(el):null)};
+
+  const mutate=(fn:(el:HTMLElement)=>void)=>{const d=doc(),el=d&&byId(d,selectedId);if(!el)return;const before=snap();if(before)history.push(before);fn(el);const after=snap();if(after)history.push(after);refresh();queueAutosave()};
+
+  const insertElement=(kind:string)=>{
+    const d=doc();if(!d||!d.body)return;
+    const before=snap();if(before)history.push(before);
+    const node=createCatalogElement(d,kind);if(!node)return;
+    const target=byId(d,selectedId);
+    const voidTags=new Set(['AREA','BASE','BR','COL','EMBED','HR','IMG','INPUT','LINK','META','PARAM','SOURCE','TRACK','WBR','IFRAME']);
+    if(target&&target!==d.body&&!voidTags.has(target.tagName))target.appendChild(node);
+    else if(target&&target!==d.body)target.after(node);
+    else d.body.appendChild(node);
     indexDocument(d);
-    setSelectedId(s.selectedId);
-    setTimeout(()=>{refresh();queueAutosave()});
+    setSelectedId(node.getAttribute(ID));
+    const after=snap();if(after)history.push(after);
+    setTimeout(()=>{refresh();queueAutosave();node.scrollIntoView({block:'center',behavior:'smooth'})});
   };
 
-  const loadFile=async(f:File)=>{
-    const text=await f.text();
-    setHtml(text);
-    setFileName(f.name);
-    setSelectedId(null);
-    setAnalysis(null);
-    setTree([]);
-    copiedBlock.current='';
-    setHasCopiedBlock(false);
-    history.reset({html:text,selectedId:null});
-    saveDraft({html:text,fileName:f.name,device});
-  };
-
-  const select=(id:string|null)=>{
-    setSelectedId(id);
-    const d=doc();
-    const el=d&&byId(d,id);
-    setAnalysis(el?analyzeElement(el):null);
-  };
-
-  const mutate=(fn:(el:HTMLElement)=>void)=>{
-    const d=doc(),el=d&&byId(d,selectedId);
-    if(!el)return;
-    const before=snap();
-    if(before)history.push(before);
-    fn(el);
-    const after=snap();
-    if(after)history.push(after);
-    refresh();
-    queueAutosave();
-  };
-
-  const duplicate=()=>mutate(el=>{
-    const c=duplicateElement(el);
-    c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));
-    c.removeAttribute(ID);
-    indexDocument(el.ownerDocument);
-    setSelectedId(c.getAttribute(ID));
-  });
-
-  const copyBlock=()=>{
-    const d=doc(),el=d&&byId(d,selectedId);
-    if(!el)return;
-    const clone=el.cloneNode(true)as HTMLElement;
-    clone.removeAttribute(ID);
-    clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));
-    clone.removeAttribute('data-vpb-selected');
-    clone.removeAttribute('data-vpb-hover');
-    clone.querySelectorAll('[data-vpb-selected],[data-vpb-hover]').forEach(x=>{x.removeAttribute('data-vpb-selected');x.removeAttribute('data-vpb-hover')});
-    copiedBlock.current=clone.outerHTML;
-    setHasCopiedBlock(true);
-  };
-
-  const pasteBlock=(where:'before'|'after')=>{
-    const d=doc(),target=d&&byId(d,selectedId);
-    if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;
-    mutate(el=>{
-      const template=d.createElement('template');
-      template.innerHTML=copiedBlock.current.trim();
-      const clone=template.content.firstElementChild as HTMLElement|null;
-      if(!clone)return;
-      if(where==='before')el.before(clone);else el.after(clone);
-      indexDocument(d);
-      setSelectedId(clone.getAttribute(ID));
-    });
-  };
-
+  const duplicate=()=>mutate(el=>{const c=duplicateElement(el);c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));c.removeAttribute(ID);indexDocument(el.ownerDocument);setSelectedId(c.getAttribute(ID))});
+  const copyBlock=()=>{const d=doc(),el=d&&byId(d,selectedId);if(!el)return;const clone=el.cloneNode(true)as HTMLElement;clone.removeAttribute(ID);clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));clone.removeAttribute('data-vpb-selected');clone.removeAttribute('data-vpb-hover');clone.querySelectorAll('[data-vpb-selected],[data-vpb-hover]').forEach(x=>{x.removeAttribute('data-vpb-selected');x.removeAttribute('data-vpb-hover')});copiedBlock.current=clone.outerHTML;setHasCopiedBlock(true)};
+  const pasteBlock=(where:'before'|'after')=>{const d=doc(),target=d&&byId(d,selectedId);if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;mutate(el=>{const template=d.createElement('template');template.innerHTML=copiedBlock.current.trim();const clone=template.content.firstElementChild as HTMLElement|null;if(!clone)return;if(where==='before')el.before(clone);else el.after(clone);indexDocument(d);setSelectedId(clone.getAttribute(ID))})};
   const remove=()=>mutate(el=>{if(deleteElement(el))setSelectedId(null)});
   const move=(dir:-1|1)=>mutate(el=>moveElement(el,dir));
-  const undo=()=>restore(history.undo());
-  const redo=()=>restore(history.redo());
+  const undo=()=>restore(history.undo());const redo=()=>restore(history.redo());
   const exportHtml=()=>{const d=doc();if(d)downloadHtml(serialize(d),fileName)};
-  const setDevice=(next:Device)=>{
-    setDeviceState(next);
-    const d=doc();
-    const currentHtml=d?serialize(d):html;
-    if(currentHtml)saveDraft({html:currentHtml,fileName,device:next});
-  };
+  const setDevice=(next:Device)=>{setDeviceState(next);const d=doc();const currentHtml=d?serialize(d):html;if(currentHtml)saveDraft({html:currentHtml,fileName,device:next})};
 
-  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
+  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,insertElement,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
 }
