@@ -22,7 +22,9 @@ export function useEditor():EditorContextValue{
   const[tree,setTree]=useState<TreeNode[]>([]);
   const[device,setDeviceState]=useState<Device>(initialDraft?.device||'desktop');
   const[hasCopiedBlock,setHasCopiedBlock]=useState(false);
+  const[hasCopiedStyle,setHasCopiedStyle]=useState(false);
   const copiedBlock=useRef<string>('');
+  const copiedStyle=useRef<string>('');
   const grouped=useRef<GroupedMutation|null>(null);
   const[,tick]=useState(0);
   const saveTimer=useRef<number|null>(null);
@@ -81,7 +83,7 @@ export function useEditor():EditorContextValue{
 
   const restore=(s:{html:string;selectedId:string|null}|null)=>{const d=doc();if(!d||!s)return;d.open();d.write(s.html);d.close();indexDocument(d);setSelectedId(s.selectedId);setTimeout(()=>{refresh();queueAutosave()})};
 
-  const loadFile=async(f:File)=>{flushGroupedMutation();const text=await f.text();setHtml(text);setFileName(f.name);setSelectedId(null);setAnalysis(null);setTree([]);copiedBlock.current='';setHasCopiedBlock(false);history.reset({html:text,selectedId:null});saveDraft({html:text,fileName:f.name,device})};
+  const loadFile=async(f:File)=>{flushGroupedMutation();const text=await f.text();setHtml(text);setFileName(f.name);setSelectedId(null);setAnalysis(null);setTree([]);copiedBlock.current='';copiedStyle.current='';setHasCopiedBlock(false);setHasCopiedStyle(false);history.reset({html:text,selectedId:null});saveDraft({html:text,fileName:f.name,device})};
   const select=(id:string|null)=>{flushGroupedMutation();setSelectedId(id);const d=doc();const el=d&&byId(d,id);setAnalysis(el?analyzeElement(el):null)};
 
   const mutate=(fn:(el:HTMLElement)=>void)=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedId);if(!el)return;const before=snap();if(before)history.push(before);fn(el);const after=snap();if(after)history.push(after);refresh();queueAutosave()};
@@ -140,6 +142,9 @@ export function useEditor():EditorContextValue{
   const duplicate=()=>mutate(el=>{const c=duplicateElement(el);c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));c.removeAttribute(ID);indexDocument(el.ownerDocument);setSelectedId(c.getAttribute(ID))});
   const copyBlock=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedId);if(!el)return;const clone=el.cloneNode(true)as HTMLElement;clone.removeAttribute(ID);clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));clone.removeAttribute('data-vpb-selected');clone.removeAttribute('data-vpb-hover');clone.querySelectorAll('[data-vpb-selected],[data-vpb-hover]').forEach(x=>{x.removeAttribute('data-vpb-selected');x.removeAttribute('data-vpb-hover')});copiedBlock.current=clone.outerHTML;setHasCopiedBlock(true)};
   const pasteBlock=(where:'before'|'after')=>{flushGroupedMutation();const d=doc(),target=d&&byId(d,selectedId);if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;mutate(el=>{const template=d.createElement('template');template.innerHTML=copiedBlock.current.trim();const clone=template.content.firstElementChild as HTMLElement|null;if(!clone)return;if(where==='before')el.before(clone);else el.after(clone);indexDocument(d);setSelectedId(clone.getAttribute(ID))})};
+  const copyStyle=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedId);if(!el)return;copiedStyle.current=el.style.cssText;setHasCopiedStyle(true)};
+  const pasteStyle=()=>{if(!hasCopiedStyle)return;mutate(el=>{el.style.cssText=copiedStyle.current})};
+  const clearInlineStyle=()=>mutate(el=>el.removeAttribute('style'));
   const remove=()=>mutate(el=>{if(deleteElement(el))setSelectedId(null)});
   const move=(dir:-1|1)=>mutate(el=>moveElement(el,dir));
   const undo=()=>{flushGroupedMutation();restore(history.undo())};
@@ -147,5 +152,5 @@ export function useEditor():EditorContextValue{
   const exportHtml=()=>{flushGroupedMutation();const d=doc();if(d)downloadHtml(serialize(d),fileName)};
   const setDevice=(next:Device)=>{flushGroupedMutation();setDeviceState(next);const d=doc();const currentHtml=d?serialize(d):html;if(currentHtml)saveDraft({html:currentHtml,fileName,device:next})};
 
-  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,loadFile,select,setDevice,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,remove,move,undo,redo,exportHtml,refresh};
+  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,hasCopiedStyle,loadFile,select,setDevice,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,copyStyle,pasteStyle,clearInlineStyle,remove,move,undo,redo,exportHtml,refresh};
 }
