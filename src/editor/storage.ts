@@ -11,7 +11,8 @@ export function loadDraft():SavedDraft|null{
     if(!raw)return null;
     const value=JSON.parse(raw) as Partial<SavedDraft>;
     if(value.version!==1||typeof value.html!=='string'||!value.html)return null;
-    return{version:1,html:value.html,fileName:typeof value.fileName==='string'&&value.fileName?value.fileName:'edited.html',device:value.device==='tablet'||value.device==='mobile'?'device' in value?value.device:'desktop':'desktop',savedAt:typeof value.savedAt==='number'?value.savedAt:0};
+    const device:Device=value.device==='tablet'||value.device==='mobile'||value.device==='desktop'?value.device:'desktop';
+    return{version:1,html:value.html,fileName:typeof value.fileName==='string'&&value.fileName?value.fileName:'edited.html',device,savedAt:typeof value.savedAt==='number'?value.savedAt:0};
   }catch{return null}
 }
 
