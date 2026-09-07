@@ -73,20 +73,20 @@ export function useEditor():EditorContextValue{
     setTimeout(()=>{refresh();queueAutosave();node?.scrollIntoView({block:'center',behavior:'smooth'})});
   };
 
-  const insertElement=(kind:string,position:InsertPosition='inside')=>{
+  const insertElement=(kind:string,position:InsertPosition='inside',targetId:string|null=selectedId)=>{
     const d=doc();if(!d||!d.body)return;
     const before=snap();if(before)history.push(before);
     const node=createCatalogElement(d,kind);if(!node)return;
-    insertNode(d,byId(d,selectedId),node,position);
+    insertNode(d,byId(d,targetId),node,position);
     finishInsert(d,node);
   };
 
-  const insertHtml=(snippet:string,position:InsertPosition='inside')=>{
+  const insertHtml=(snippet:string,position:InsertPosition='inside',targetId:string|null=selectedId)=>{
     const d=doc();if(!d||!d.body||!snippet.trim())return;
     const before=snap();if(before)history.push(before);
     const{fragment,firstElement}=parseHtmlSnippet(d,snippet);
     if(!fragment.childNodes.length)return;
-    insertNode(d,byId(d,selectedId),fragment,position);
+    insertNode(d,byId(d,targetId),fragment,position);
     finishInsert(d,firstElement);
   };
 
