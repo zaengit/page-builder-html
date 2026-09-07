@@ -19,6 +19,8 @@ test('creates a unique id for an unscoped selected element and uses it in CSS he
   await expect(props.getByText('#vpb-h2-1',{exact:true})).toBeVisible();
   await props.getByRole('button',{name:/Insert selector/i}).click();
   await expect(props.getByLabel('Page CSS')).toHaveValue(/#vpb-h2-1 \{/);
+  await props.getByLabel('Page CSS').blur();
+  await page.keyboard.press('Control+z');
   await page.keyboard.press('Control+z');
   await expect(first).not.toHaveAttribute('id');
 });
