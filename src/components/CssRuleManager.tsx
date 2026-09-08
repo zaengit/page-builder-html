@@ -7,18 +7,19 @@ export function CssRuleManager({css,onChange,onCommit,defaultSelector='',default
   const[query,setQuery]=useState('');const[selectedKey,setSelectedKey]=useState('');const[newSelector,setNewSelector]=useState(defaultSelector);const[selector,setSelector]=useState('');const[declarations,setDeclarations]=useState('');const[rows,setRows]=useState<CssDeclaration[]>([]);
   const filtered=rules.filter(r=>`${r.selector} ${r.context}`.toLowerCase().includes(query.trim().toLowerCase()));
   const selected=rules.find(r=>r.path.join('.')===selectedKey)||null;
+  const commitSoon=()=>window.setTimeout(onCommit,0);
   useEffect(()=>{setNewSelector(defaultSelector)},[defaultSelector]);
   useEffect(()=>{if(selected){setSelector(selected.selector);setDeclarations(selected.declarations);setRows(parseDeclarations(selected.declarations))}else{setSelector('');setDeclarations('');setRows([]);if(selectedKey)setSelectedKey('')}},[selected?.path.join('.'),selected?.selector,selected?.declarations]);
   const choose=(key:string)=>{onCommit();setSelectedKey(key)};
   const applyDeclarations=(value:string)=>{setDeclarations(value);setRows(parseDeclarations(value));if(selected)onChange(updateCssRule(css,selected.path,value))};
   const changeRow=(index:number,patch:Partial<CssDeclaration>)=>{const next=rows.map((r,i)=>i===index?{...r,...patch}:r);setRows(next);const raw=serializeDeclarations(next);setDeclarations(raw);if(selected)onChange(updateCssRule(css,selected.path,raw))};
   const addRow=()=>{const next=[...rows,{property:'',value:'',priority:''}];setRows(next)};
-  const removeRow=(index:number)=>{const next=rows.filter((_,i)=>i!==index);setRows(next);const raw=serializeDeclarations(next);setDeclarations(raw);if(selected)onChange(updateCssRule(css,selected.path,raw));onCommit()};
-  const rename=()=>{if(!selected||!selector.trim())return;onChange(renameCssRule(css,selected.path,selector));onCommit()};
-  const duplicate=()=>{if(!selected)return;onChange(duplicateCssRule(css,selected.path));onCommit()};
-  const remove=()=>{if(!selected)return;onChange(deleteCssRule(css,selected.path));onCommit();setSelectedKey('')};
-  const move=(dir:-1|1)=>{if(!selected)return;onChange(moveCssRule(css,selected.path,dir));onCommit();setSelectedKey('')};
-  const create=()=>{const value=newSelector.trim();if(!value)return;onChange(insertCssRule(css,value,defaultContext));onCommit();setNewSelector(defaultSelector)};
+  const removeRow=(index:number)=>{const next=rows.filter((_,i)=>i!==index);setRows(next);const raw=serializeDeclarations(next);setDeclarations(raw);if(selected)onChange(updateCssRule(css,selected.path,raw));commitSoon()};
+  const rename=()=>{if(!selected||!selector.trim())return;const next=renameCssRule(css,selected.path,selector);if(next===css)return;onChange(next);commitSoon()};
+  const duplicate=()=>{if(!selected)return;const next=duplicateCssRule(css,selected.path);if(next===css)return;onChange(next);commitSoon()};
+  const remove=()=>{if(!selected)return;const next=deleteCssRule(css,selected.path);if(next===css)return;onChange(next);setSelectedKey('');commitSoon()};
+  const move=(dir:-1|1)=>{if(!selected)return;const next=moveCssRule(css,selected.path,dir);if(next===css)return;onChange(next);setSelectedKey('');commitSoon()};
+  const create=()=>{const value=newSelector.trim();if(!value)return;const next=insertCssRule(css,value,defaultContext);if(next===css)return;onChange(next);setNewSelector(defaultSelector);commitSoon()};
   return <div className="mb-2 rounded-md border border-zinc-800 bg-zinc-900/40 p-2" aria-label="CSS rule manager">
     <div className="mb-2 flex items-center justify-between"><div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Rule manager</div><span className="text-[9px] text-zinc-600">{rules.length} rules</span></div>
     <div className="mb-2 flex items-center gap-1 rounded border border-zinc-800 bg-zinc-950 px-2"><Search size={11} className="text-zinc-600"/><input aria-label="Search CSS rules" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Filter selectors..." className="min-w-0 flex-1 bg-transparent py-1.5 text-[10px] text-zinc-300 outline-none"/>{query&&<button onClick={()=>setQuery('')} title="Clear rule search" className="text-zinc-600 hover:text-zinc-300"><X size={11}/></button>}</div>
