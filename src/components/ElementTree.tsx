@@ -11,7 +11,6 @@ const positions:{id:InsertPosition;label:string}[]=[{id:'inside',label:'Inside'}
 const voidTags=new Set(['AREA','BASE','BR','COL','EMBED','HR','IMG','INPUT','LINK','META','PARAM','SOURCE','TRACK','WBR','IFRAME']);
 
 type MainTab='insert'|'tree';
-
 type PointerDrop={target:HTMLElement;position:InsertPosition}|null;
 
 function pointerDropPosition(target:HTMLElement,clientY:number):InsertPosition{
@@ -62,7 +61,7 @@ export function ElementTree({e,className=''}:{e:EditorContextValue;className?:st
   };
 
   const startPointerDrag=(ev:React.PointerEvent<HTMLButtonElement>,id:string,label:string)=>{
-    if(id==='html'||ev.button!==0||!e.html)return;
+    if(id==='html'||ev.button!==0||ev.pointerType==='mouse'||!e.html)return;
     const startX=ev.clientX,startY=ev.clientY;
     let dragging=false;
     const source=ev.currentTarget;
