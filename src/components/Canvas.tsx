@@ -10,6 +10,7 @@ type ToolbarPos={left:number;top:number;tag:string}|null;
 
 function dropPosition(target:HTMLElement,clientY:number):InsertPosition{if(voidTags.has(target.tagName))return clientY<target.getBoundingClientRect().top+target.getBoundingClientRect().height/2?'before':'after';const rect=target.getBoundingClientRect();const ratio=rect.height?((clientY-rect.top)/rect.height):.5;if(ratio<.25)return'before';if(ratio>.75)return'after';return'inside'}
 function editingTarget(target:EventTarget|null){const el=target as HTMLElement|null;return !!el&&(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName))}
+function selectionTarget(target:HTMLElement,clientX:number,clientY:number){let parent=target.parentElement;while(parent&&!['BODY','HTML'].includes(parent.tagName)){if(parent.hasAttribute(ID)){const r=parent.getBoundingClientRect();const edge=Math.min(Math.abs(clientX-r.left),Math.abs(r.right-clientX),Math.abs(clientY-r.top),Math.abs(r.bottom-clientY));if(edge<=8)return parent}parent=parent.parentElement}return target}
 
 export function Canvas({e}:{e:EditorContextValue}){
   const[toolbar,setToolbar]=useState<ToolbarPos>(null);
@@ -27,7 +28,7 @@ export function Canvas({e}:{e:EditorContextValue}){
       const updateToolbar=()=>requestAnimationFrame(positionToolbar);
       const mouseover=(ev:MouseEvent)=>{const t=ev.target as HTMLElement;if(!t?.getAttribute)return;hover?.removeAttribute('data-vpb-hover');hover=t;hover.setAttribute('data-vpb-hover','')};
       const mouseout=()=>{hover?.removeAttribute('data-vpb-hover');hover=null};
-      const click=(ev:MouseEvent)=>{ev.preventDefault();ev.stopPropagation();const t=ev.target as HTMLElement;editorRef.current.select(t.getAttribute(ID));updateToolbar()};
+      const click=(ev:MouseEvent)=>{ev.preventDefault();ev.stopPropagation();const raw=ev.target as HTMLElement;if(!raw?.getAttribute)return;const t=selectionTarget(raw,ev.clientX,ev.clientY);editorRef.current.select(t.getAttribute(ID));updateToolbar()};
       const submit=(ev:Event)=>ev.preventDefault();
       const scroll=()=>updateToolbar();
       const resize=()=>updateToolbar();
