@@ -12,11 +12,11 @@ test('selected canvas block shows floating toolbar with block actions',async({pa
   await expect(toolbar).toBeVisible();
   await expect(toolbar).toContainText('<section>');
 
-  await page.getByTitle('Canvas duplicate').click();
+  await page.getByRole('button',{name:'Duplicate selected block'}).click();
   await expect(frame.locator('main > section')).toHaveCount(3);
 
-  await page.getByTitle('Canvas copy block').click();
-  await expect(page.getByTitle('Canvas paste after')).toBeEnabled();
+  await page.getByRole('button',{name:'Copy selected block'}).click();
+  await expect(page.getByRole('button',{name:'Paste block after selection'})).toBeEnabled();
 });
 
 test('canvas toolbar delete removes selected block and toolbar',async({page})=>{
@@ -25,7 +25,7 @@ test('canvas toolbar delete removes selected block and toolbar',async({page})=>{
   const frame=page.frameLocator('iframe[title="HTML canvas"]');
   await frame.locator('#two').click({position:{x:8,y:8}});
   await expect(page.getByTestId('canvas-block-toolbar')).toBeVisible();
-  await page.getByTitle('Canvas delete').click();
+  await page.getByRole('button',{name:'Delete selected block'}).click();
   await expect(frame.locator('#two')).toHaveCount(0);
   await expect(page.getByTestId('canvas-block-toolbar')).toHaveCount(0);
 });
