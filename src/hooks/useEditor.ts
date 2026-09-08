@@ -5,9 +5,10 @@ import{deleteElement,duplicateElement,moveElement}from'../editor/mutations';
 import{createCatalogElement}from'../editor/elementCatalog';
 import{insertNode,parseHtmlSnippet}from'../editor/insertion';
 import{loadDraft,saveDraft}from'../editor/storage';
+import{chooseEntry,downloadProjectZip,filesFromProject,getPageMeta as readPageMeta,getResponsiveRule,loadRevisions,makeRevision,saveRevision,setPageMeta as writePageMeta,setResponsiveRule}from'../editor/projectTools';
 import{defaultContent,downloadFile,fileTypeFromName,makeWorkspaceFile,renderWorkspaceHtml,serializeWorkspaceDocument}from'../editor/workspace';
 import{useHistory}from'./useHistory';
-import type{Device,EditorContextValue,TreeNode,ElementAnalysis,InsertPosition,WorkspaceFile,WorkspaceFileType,EditorMode}from'../types/editor';
+import type{Device,EditorContextValue,TreeNode,ElementAnalysis,InsertPosition,WorkspaceFile,WorkspaceFileType,EditorMode,PageMeta}from'../types/editor';
 
 type GroupedMutation={key:string;timer:number|null};
 const starter=()=>{const f=makeWorkspaceFile('index.html','html','');return{files:[f],activeFileId:f.id,entryFileId:f.id}}
@@ -31,6 +32,7 @@ export function useEditor():EditorContextValue{
  useEffect(()=>{if(html)history.reset({html,selectedId:null})},[]);
  useEffect(()=>{const flush=()=>persistNow(),visibility=()=>{if(document.visibilityState==='hidden')flush()};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',visibility);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',visibility);if(saveTimer.current!==null)clearTimeout(saveTimer.current);if(grouped.current?.timer!=null)clearTimeout(grouped.current.timer)}},[persistNow]);
  const loadFile=async(f:File)=>{flushGroupedMutation();const type=fileTypeFromName(f.name);if(!type)return;const text=await f.text(),wf=makeWorkspaceFile(f.name,type,text);if(type==='html'){setFiles([wf]);setEntryFileId(wf.id);entryRef.current=wf.id}else setFiles(p=>[...p,wf]);setActiveFileId(wf.id);activeRef.current=wf.id;setModeState(type==='html'?'visual':'raw');selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([]);if(type==='html')history.reset({html:text,selectedId:null});queueAutosave()};
+ const loadProject=async(input:FileList|File[])=>{flushGroupedMutation();const next=await filesFromProject(input),entry=chooseEntry(next);if(!entry)return;setFiles(next);setEntryFileId(entry.id);entryRef.current=entry.id;setActiveFileId(entry.id);activeRef.current=entry.id;setModeState('visual');selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([]);history.reset({html:entry.content,selectedId:null});queueAutosave()};
  const select=(id:string|null)=>{flushGroupedMutation();applySelection(id)};
  const commitVisual=(before:{html:string;selectedId:string|null}|null)=>{if(before)history.push(before);const after=snap();if(after){history.push(after);updateEntry(after.html,false)}refresh()};
  const mutate=(fn:(el:HTMLElement)=>void)=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();fn(el);applySelection(selectedIdRef.current,d);commitVisual(before)};
@@ -53,6 +55,18 @@ export function useEditor():EditorContextValue{
  const deleteFile=(id:string)=>{const f=filesRef.current.find(x=>x.id===id);if(!f||filesRef.current.length===1)return;if(id===entryRef.current){const next=filesRef.current.find(x=>x.id!==id&&x.type==='html');if(!next)return;setEntryFileId(next.id);entryRef.current=next.id}const remaining=filesRef.current.filter(x=>x.id!==id);setFiles(remaining);if(activeRef.current===id){const next=remaining.find(x=>x.id===entryRef.current)||remaining[0];setActiveFileId(next.id);activeRef.current=next.id}queueAutosave()};
  const updateActiveFileContent=(content:string)=>{const id=activeRef.current;setFiles(p=>p.map(f=>f.id===id?{...f,content,updatedAt:Date.now()}:f));if(id===entryRef.current){selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([])}queueAutosave()};
  const setEntryFile=(id:string)=>{if(filesRef.current.some(f=>f.id===id&&f.type==='html')){setEntryFileId(id);entryRef.current=id;setActiveFileId(id);activeRef.current=id;setSelectedId(null);queueAutosave()}};
- const exportCurrentFile=()=>{if(mode==='visual')syncFromCanvas(false);const f=filesRef.current.find(x=>x.id===activeRef.current);if(f)downloadFile(f)},exportHtml=()=>{if(mode==='visual')syncFromCanvas(false);const f=filesRef.current.find(x=>x.id===entryRef.current);if(f)downloadFile(f)};
- return{iframeRef,html,renderedHtml,fileName,files,activeFileId,entryFileId,mode,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,hasCopiedStyle,loadFile,select,setDevice,setMode,setActiveFile,createFile,renameFile,duplicateFile,deleteFile,updateActiveFileContent,setEntryFile,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,copyStyle,pasteStyle,clearInlineStyle,remove,move,undo,redo,exportHtml,exportCurrentFile,refresh}
+ const selected=()=>{const d=doc();return d&&byId(d,selectedIdRef.current)};
+ const getSelectedClasses=()=>selected()?[...selected()!.classList]:[];
+ const addClass=(name:string)=>{const clean=name.trim().replace(/^\./,'').replace(/\s+/g,'-');if(clean)mutate(el=>el.classList.add(clean))};
+ const removeClass=(name:string)=>mutate(el=>el.classList.remove(name));
+ const setResponsiveStyle=(property:string,value:string)=>mutate(el=>{const d=doc();if(d)setResponsiveRule(d,el,device,property,value)});
+ const getResponsiveStyle=(property:string)=>{const d=doc(),el=selected();return d&&el?getResponsiveRule(d,el,device,property):''};
+ const setPseudoStyle=(pseudo:'hover'|'focus'|'active',property:string,value:string)=>mutate(el=>{const d=doc();if(d)setResponsiveRule(d,el,device,property,value,`:${pseudo}`)});
+ const getPageMeta=():PageMeta=>{const d=doc();if(d)return readPageMeta(d);try{const parsed=new DOMParser().parseFromString(filesRef.current.find(f=>f.id===entryRef.current)?.content||'','text/html');return readPageMeta(parsed)}catch{return{title:'',description:'',favicon:''}}};
+ const setPageMeta=(meta:Partial<PageMeta>)=>{const d=doc();if(!d)return;const before=snap();writePageMeta(d,meta);commitVisual(before)};
+ const createRevision=(label='Manual snapshot')=>{if(mode==='visual')syncFromCanvas(false);saveRevision(makeRevision(filesRef.current,activeRef.current,entryRef.current,device,label))};
+ const listRevisions=()=>loadRevisions();
+ const restoreRevision=(id:string)=>{const r=loadRevisions().find(x=>x.id===id);if(!r)return;setFiles(structuredClone(r.files));setActiveFileId(r.activeFileId);activeRef.current=r.activeFileId;setEntryFileId(r.entryFileId);entryRef.current=r.entryFileId;setDeviceState(r.device);setModeState('visual');selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([]);const ent=r.files.find(f=>f.id===r.entryFileId);if(ent)history.reset({html:ent.content,selectedId:null});queueAutosave()};
+ const exportCurrentFile=()=>{if(mode==='visual')syncFromCanvas(false);const f=filesRef.current.find(x=>x.id===activeRef.current);if(f)downloadFile(f)},exportHtml=()=>{if(mode==='visual')syncFromCanvas(false);const f=filesRef.current.find(x=>x.id===entryRef.current);if(f)downloadFile(f)},exportProject=()=>{if(mode==='visual')syncFromCanvas(false);downloadProjectZip(filesRef.current)};
+ return{iframeRef,html,renderedHtml,fileName,files,activeFileId,entryFileId,mode,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,hasCopiedStyle,loadFile,loadProject,select,setDevice,setMode,setActiveFile,createFile,renameFile,duplicateFile,deleteFile,updateActiveFileContent,setEntryFile,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,copyStyle,pasteStyle,clearInlineStyle,remove,move,undo,redo,getSelectedClasses,addClass,removeClass,setResponsiveStyle,getResponsiveStyle,setPseudoStyle,getPageMeta,setPageMeta,createRevision,listRevisions,restoreRevision,exportHtml,exportCurrentFile,exportProject,refresh}
 }
