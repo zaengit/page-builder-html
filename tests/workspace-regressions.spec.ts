@@ -1,22 +1,26 @@
 import{expect,test}from'@playwright/test';
 
 const key='visual-html-page-builder:draft:v2';
+const fixture='<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><h1 id="hero">Fixture</h1></body></html>';
 
 async function clearAndOpen(page:any){
   await page.addInitScript(()=>{if(window===window.top)localStorage.clear()});
   await page.goto('./');
-  return page.frameLocator('iframe[title="HTML canvas"]');
+  await page.locator('input[type="file"]').setInputFiles({name:'fixture.html',mimeType:'text/html',buffer:Buffer.from(fixture)});
+  const frame=page.frameLocator('iframe[title="HTML canvas"]');
+  await expect(frame.locator('#hero')).toBeVisible();
+  return frame;
 }
 
 test('visual mutation is preserved when a new workspace file is created',async({page})=>{
   const frame=await clearAndOpen(page);
-  await frame.locator('h1').click();
+  await frame.locator('#hero').click();
   const props=page.locator('aside').filter({hasText:'Properties'}).last();
   await props.getByRole('tab',{name:'CSS'}).click();
   const inline=props.getByLabel('Element CSS');
   await inline.fill('padding: 37px;');
   await inline.blur();
-  await expect(frame.locator('h1')).toHaveCSS('padding-top','37px');
+  await expect(frame.locator('#hero')).toHaveCSS('padding-top','37px');
 
   await page.getByRole('button',{name:'Files',exact:true}).click();
   page.once('dialog',d=>d.accept('theme'));
@@ -56,15 +60,15 @@ test('renaming workspace css and js files rewrites entry references',async({page
 
 test('undo snapshot survives switching to raw mode and autosave',async({page})=>{
   const frame=await clearAndOpen(page);
-  await frame.locator('h1').click();
+  await frame.locator('#hero').click();
   const props=page.locator('aside').filter({hasText:'Properties'}).last();
   await props.getByRole('tab',{name:'CSS'}).click();
   const inline=props.getByLabel('Element CSS');
   await inline.fill('margin: 41px;');
   await inline.blur();
-  await expect(frame.locator('h1')).toHaveCSS('margin-top','41px');
+  await expect(frame.locator('#hero')).toHaveCSS('margin-top','41px');
   await page.keyboard.press('Control+z');
-  await expect(frame.locator('h1')).toHaveCSS('margin-top','0px');
+  await expect(frame.locator('#hero')).toHaveCSS('margin-top','0px');
 
   await page.getByTestId('mode-raw').click();
   await expect(page.getByTestId('raw-editor')).toBeVisible();
