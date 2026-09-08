@@ -83,8 +83,8 @@ test('background-image container can be selected and edited through universal CS
   const frame = await uploadComplex(page);
   await frame.locator('#hero').click({ position: { x: 20, y: 20 } });
   await expect(page.getByText('<section> · container')).toBeVisible();
-  await expect(page.getByText('Element CSS', { exact: true })).toBeVisible();
   const css=page.getByLabel('Element CSS');
+  await expect(css).toBeVisible();
   await css.fill('background-color: rgb(1, 2, 3); padding: 20px;');
   await page.getByRole('button',{name:'Apply CSS'}).click();
   await expect(frame.locator('#hero')).toHaveCSS('background-color','rgb(1, 2, 3)');
