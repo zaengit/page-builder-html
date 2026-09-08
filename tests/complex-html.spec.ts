@@ -93,7 +93,9 @@ test('background-image container can be selected and edited through universal CS
 test('editing complex direct text preserves nested strong and heading nodes', async ({ page }) => {
   const frame = await uploadComplex(page);
   await frame.locator('#hero').click({ position: { x: 20, y: 20 } });
-  const textarea = page.locator('textarea').first();
+  const props=page.locator('aside').filter({hasText:'Properties'}).last();
+  await props.getByRole('tab',{name:'Content'}).click();
+  const textarea=props.locator('textarea').first();
   await textarea.fill('Replaced hero direct text');
   await textarea.blur();
   await expect(frame.locator('#hero-strong')).toHaveText('with emphasis');
