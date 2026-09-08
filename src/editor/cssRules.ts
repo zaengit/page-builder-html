@@ -32,6 +32,8 @@ export function insertCssRule(css:string,selector:string,context=''){const sheet
   }else sheet.insertRule(ruleText,sheet.cssRules.length);
 }catch{return css}return serialize(sheet)}
 
-export function parseDeclarations(declarations:string){const style=document.createElement('div').style;style.cssText=declarations;const out:CssDeclaration[]=[];for(let i=0;i<style.length;i++){const property=style.item(i);out.push({property,value:style.getPropertyValue(property).trim(),priority:style.getPropertyPriority(property)})}return out}
+function declarationChunks(input:string){const out:string[]=[];let start=0,depth=0,quote='';for(let i=0;i<input.length;i++){const ch=input[i];if(quote){if(ch==='\\'){i++;continue}if(ch===quote)quote='';continue}if(ch==='"'||ch==="'"){quote=ch;continue}if(ch==='('||ch==='['){depth++;continue}if((ch===')'||ch===']')&&depth>0){depth--;continue}if(ch===';'&&depth===0){out.push(input.slice(start,i));start=i+1}}out.push(input.slice(start));return out}
+
+export function parseDeclarations(declarations:string){const out:CssDeclaration[]=[];for(const raw of declarationChunks(declarations)){const line=raw.trim();if(!line)continue;const colon=line.indexOf(':');if(colon<=0)continue;const property=line.slice(0,colon).trim();let value=line.slice(colon+1).trim();let priority='';if(/\s*!important\s*$/i.test(value)){value=value.replace(/\s*!important\s*$/i,'').trim();priority='important'}if(property)out.push({property,value,priority})}return out}
 
 export function serializeDeclarations(rows:CssDeclaration[]){return rows.filter(r=>r.property.trim()).map(r=>`${r.property.trim()}: ${r.value.trim()}${r.priority?' !important':''};`).join(' ')}
