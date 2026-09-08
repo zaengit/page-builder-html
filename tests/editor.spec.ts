@@ -114,9 +114,11 @@ test('switches responsive preview width without editing HTML', async ({ page }) 
 test('exports clean HTML without editor metadata and keeps applied CSS', async ({ page }) => {
   const frame = await upload(page);
   await frame.locator('#title').click();
-  const css=page.getByLabel('Element CSS');
+  const props=page.locator('aside').filter({hasText:'Properties'}).last();
+  await props.getByRole('tab',{name:'CSS'}).click();
+  const css=props.getByLabel('Element CSS');
   await css.fill('color: rgb(10, 20, 30); font-size: 44px;');
-  await page.getByRole('button',{name:'Apply CSS'}).click();
+  await props.getByRole('button',{name:'Apply CSS'}).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export HTML/i }).click();
   const download = await downloadPromise;
