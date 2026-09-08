@@ -1,89 +1,58 @@
-import{useCallback,useEffect,useRef,useState}from'react';
+import{useCallback,useEffect,useMemo,useRef,useState}from'react';
 import{analyzeElement}from'../editor/elementAnalyzer';
 import{buildTree,byId,indexDocument,ID}from'../editor/selection';
 import{deleteElement,duplicateElement,moveElement}from'../editor/mutations';
 import{createCatalogElement}from'../editor/elementCatalog';
 import{insertNode,parseHtmlSnippet}from'../editor/insertion';
-import{downloadHtml,serialize}from'../editor/serializer';
 import{loadDraft,saveDraft}from'../editor/storage';
+import{defaultContent,downloadFile,fileTypeFromName,makeWorkspaceFile,renderWorkspaceHtml,serializeWorkspaceDocument}from'../editor/workspace';
 import{useHistory}from'./useHistory';
-import type{Device,EditorContextValue,TreeNode,ElementAnalysis,InsertPosition}from'../types/editor';
+import type{Device,EditorContextValue,TreeNode,ElementAnalysis,InsertPosition,WorkspaceFile,WorkspaceFileType,EditorMode}from'../types/editor';
 
 type GroupedMutation={key:string;timer:number|null};
-
+const starter=()=>{const f=makeWorkspaceFile('index.html','html','');return{files:[f],activeFileId:f.id,entryFileId:f.id}}
 export function useEditor():EditorContextValue{
-  const iframeRef=useRef<HTMLIFrameElement>(null);
-  const history=useHistory();
-  const initialDraft=useRef(loadDraft()).current;
-  const[html,setHtml]=useState(initialDraft?.html||'');
-  const[fileName,setFileName]=useState(initialDraft?.fileName||'edited.html');
-  const[selectedId,setSelectedId]=useState<string|null>(null);
-  const selectedIdRef=useRef<string|null>(null);
-  const[analysis,setAnalysis]=useState<ElementAnalysis|null>(null);
-  const[tree,setTree]=useState<TreeNode[]>([]);
-  const[device,setDeviceState]=useState<Device>(initialDraft?.device||'desktop');
-  const[hasCopiedBlock,setHasCopiedBlock]=useState(false);
-  const[hasCopiedStyle,setHasCopiedStyle]=useState(false);
-  const copiedBlock=useRef('');
-  const copiedStyle=useRef('');
-  const grouped=useRef<GroupedMutation|null>(null);
-  const[,tick]=useState(0);
-  const saveTimer=useRef<number|null>(null);
-  const doc=()=>iframeRef.current?.contentDocument||null;
-
-  const applySelection=useCallback((id:string|null,d:Document|null=doc())=>{
-    selectedIdRef.current=id;
-    setSelectedId(id);
-    if(!d){setAnalysis(null);return}
-    d.querySelectorAll<HTMLElement>('[data-vpb-selected]').forEach(x=>x.removeAttribute('data-vpb-selected'));
-    d.querySelectorAll<HTMLElement>('[data-vpb-added-draggable]').forEach(x=>{x.removeAttribute('data-vpb-added-draggable');x.removeAttribute('draggable')});
-    const el=byId(d,id);
-    if(el){el.setAttribute('data-vpb-selected','');if(!['HTML','BODY'].includes(el.tagName)&&!el.hasAttribute('draggable')){el.setAttribute('draggable','true');el.setAttribute('data-vpb-added-draggable','')}}
-    setAnalysis(el?analyzeElement(el):null);
-  },[]);
-
-  const refresh=useCallback(()=>{
-    const d=doc();if(!d)return;
-    setTree(buildTree(d));
-    const el=byId(d,selectedIdRef.current);
-    setAnalysis(el?analyzeElement(el):null);
-    tick(x=>x+1);
-  },[]);
-
-  const persistNow=useCallback(()=>{const d=doc();const currentHtml=d?serialize(d):html;if(currentHtml)saveDraft({html:currentHtml,fileName,device})},[html,fileName,device]);
-  const queueAutosave=useCallback(()=>{if(saveTimer.current!==null)window.clearTimeout(saveTimer.current);saveTimer.current=window.setTimeout(()=>{saveTimer.current=null;persistNow()},350)},[persistNow]);
-  const snap=(selection:string|null=selectedIdRef.current)=>{const d=doc();return d?{html:d.documentElement.outerHTML,selectedId:selection}:null};
-
-  const flushGroupedMutation=()=>{const active=grouped.current;if(!active)return;if(active.timer!==null)window.clearTimeout(active.timer);grouped.current=null;const after=snap();if(after)history.push(after);refresh();queueAutosave()};
-
-  useEffect(()=>{if(initialDraft?.html)history.reset({html:initialDraft.html,selectedId:null})},[]);
-  useEffect(()=>{const flush=()=>persistNow();const visibility=()=>{if(document.visibilityState==='hidden')flush()};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',visibility);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',visibility);if(saveTimer.current!==null)window.clearTimeout(saveTimer.current);if(grouped.current?.timer!=null)window.clearTimeout(grouped.current.timer)}},[persistNow]);
-
-  const restore=(s:{html:string;selectedId:string|null}|null)=>{const d=doc();if(!d||!s)return;d.open();d.write(s.html);d.close();indexDocument(d);applySelection(s.selectedId,d);setTimeout(()=>{refresh();queueAutosave()})};
-  const loadFile=async(f:File)=>{flushGroupedMutation();const text=await f.text();setHtml(text);setFileName(f.name);selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([]);copiedBlock.current='';copiedStyle.current='';setHasCopiedBlock(false);setHasCopiedStyle(false);history.reset({html:text,selectedId:null});saveDraft({html:text,fileName:f.name,device})};
-  const select=(id:string|null)=>{flushGroupedMutation();applySelection(id)};
-
-  const mutate=(fn:(el:HTMLElement)=>void)=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();if(before)history.push(before);fn(el);applySelection(selectedIdRef.current,d);const after=snap();if(after)history.push(after);refresh();queueAutosave()};
-  const mutateGrouped=(key:string,fn:(el:HTMLElement)=>void)=>{const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!el)return;if(grouped.current&&grouped.current.key!==key)flushGroupedMutation();if(!grouped.current){const before=snap();if(before)history.push(before);grouped.current={key,timer:null}}fn(el);const active=grouped.current;if(!active)return;if(active.timer!==null)window.clearTimeout(active.timer);active.timer=window.setTimeout(()=>flushGroupedMutation(),350);queueAutosave()};
-
-  const finishInsert=(d:Document,node:HTMLElement|null)=>{indexDocument(d);const next=node?.getAttribute(ID)||selectedIdRef.current;applySelection(next,d);const after=snap(next);if(after)history.push(after);setTimeout(()=>{refresh();queueAutosave();node?.scrollIntoView({block:'center',behavior:'smooth'})})};
-  const insertElement=(kind:string,position:InsertPosition='inside',targetId:string|null=selectedIdRef.current)=>{flushGroupedMutation();const d=doc();if(!d||!d.body)return;const before=snap();if(before)history.push(before);const node=createCatalogElement(d,kind);if(!node)return;insertNode(d,byId(d,targetId),node,position);finishInsert(d,node)};
-  const insertHtml=(snippet:string,position:InsertPosition='inside',targetId:string|null=selectedIdRef.current)=>{flushGroupedMutation();const d=doc();if(!d||!d.body||!snippet.trim())return;const before=snap();if(before)history.push(before);const{fragment,firstElement}=parseHtmlSnippet(d,snippet);if(!fragment.childNodes.length)return;insertNode(d,byId(d,targetId),fragment,position);finishInsert(d,firstElement)};
-
-  const moveBlock=(sourceId:string,targetId:string,position:InsertPosition)=>{flushGroupedMutation();const d=doc();if(!d)return;const source=byId(d,sourceId),target=byId(d,targetId);if(!source||!target||source===target||['BODY','HTML'].includes(source.tagName)||source.contains(target))return;const before=snap();if(before)history.push(before);insertNode(d,target,source,position);indexDocument(d);applySelection(sourceId,d);const after=snap(sourceId);if(after)history.push(after);refresh();queueAutosave();source.scrollIntoView({block:'center',behavior:'smooth'})};
-
-  const duplicate=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();if(before)history.push(before);const c=duplicateElement(el);c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));c.removeAttribute(ID);indexDocument(d);const next=c.getAttribute(ID);applySelection(next,d);const after=snap(next);if(after)history.push(after);refresh();queueAutosave()};
-  const copyBlock=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!el)return;const clone=el.cloneNode(true)as HTMLElement;clone.removeAttribute(ID);clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));clone.removeAttribute('data-vpb-selected');clone.removeAttribute('data-vpb-hover');clone.removeAttribute('data-vpb-added-draggable');clone.removeAttribute('draggable');clone.querySelectorAll('[data-vpb-selected],[data-vpb-hover],[data-vpb-added-draggable]').forEach(x=>{x.removeAttribute('data-vpb-selected');x.removeAttribute('data-vpb-hover');x.removeAttribute('data-vpb-added-draggable');x.removeAttribute('draggable')});copiedBlock.current=clone.outerHTML;setHasCopiedBlock(true)};
-  const pasteBlock=(where:'before'|'after')=>{flushGroupedMutation();const d=doc(),target=d&&byId(d,selectedIdRef.current);if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;const before=snap();if(before)history.push(before);const template=d.createElement('template');template.innerHTML=copiedBlock.current.trim();const clone=template.content.firstElementChild as HTMLElement|null;if(!clone)return;if(where==='before')target.before(clone);else target.after(clone);indexDocument(d);const next=clone.getAttribute(ID);applySelection(next,d);const after=snap(next);if(after)history.push(after);refresh();queueAutosave()};
-  const copyStyle=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!el)return;copiedStyle.current=el.style.cssText;setHasCopiedStyle(true)};
-  const pasteStyle=()=>{if(hasCopiedStyle)mutate(el=>{el.style.cssText=copiedStyle.current})};
-  const clearInlineStyle=()=>mutate(el=>el.removeAttribute('style'));
-  const remove=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();if(!deleteElement(el))return;if(before)history.push(before);applySelection(null,d);const after=snap(null);if(after)history.push(after);refresh();queueAutosave()};
-  const move=(dir:-1|1)=>mutate(el=>moveElement(el,dir));
-  const undo=()=>{flushGroupedMutation();restore(history.undo())};
-  const redo=()=>{flushGroupedMutation();restore(history.redo())};
-  const exportHtml=()=>{flushGroupedMutation();const d=doc();if(d)downloadHtml(serialize(d),fileName)};
-  const setDevice=(next:Device)=>{flushGroupedMutation();setDeviceState(next);const d=doc();const currentHtml=d?serialize(d):html;if(currentHtml)saveDraft({html:currentHtml,fileName,device:next})};
-
-  return{iframeRef,html,fileName,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,hasCopiedStyle,loadFile,select,setDevice,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,copyStyle,pasteStyle,clearInlineStyle,remove,move,undo,redo,exportHtml,refresh};
+ const iframeRef=useRef<HTMLIFrameElement>(null),history=useHistory(),initial=useRef(loadDraft()).current,base=useRef(initial||starter()).current as any;
+ const[files,setFilesState]=useState<WorkspaceFile[]>(base.files),[activeFileId,setActiveFileId]=useState(base.activeFileId),[entryFileId,setEntryFileId]=useState(base.entryFileId),[mode,setModeState]=useState<EditorMode>('visual');
+ const[selectedId,setSelectedId]=useState<string|null>(null),selectedIdRef=useRef<string|null>(null),[analysis,setAnalysis]=useState<ElementAnalysis|null>(null),[tree,setTree]=useState<TreeNode[]>([]),[device,setDeviceState]=useState<Device>(base.device||'desktop');
+ const[hasCopiedBlock,setHasCopiedBlock]=useState(false),[hasCopiedStyle,setHasCopiedStyle]=useState(false),copiedBlock=useRef(''),copiedStyle=useRef(''),grouped=useRef<GroupedMutation|null>(null),saveTimer=useRef<number|null>(null),filesRef=useRef(files),activeRef=useRef(activeFileId),entryRef=useRef(entryFileId);const[,tick]=useState(0);
+ const setFiles=(next:WorkspaceFile[]|((prev:WorkspaceFile[])=>WorkspaceFile[]))=>setFilesState(prev=>{const value=typeof next==='function'?(next as any)(prev):next;filesRef.current=value;return value});
+ useEffect(()=>{filesRef.current=files},[files]);useEffect(()=>{activeRef.current=activeFileId},[activeFileId]);useEffect(()=>{entryRef.current=entryFileId},[entryFileId]);
+ const entry=files.find(f=>f.id===entryFileId&&f.type==='html')||files.find(f=>f.type==='html'),active=files.find(f=>f.id===activeFileId)||entry||files[0];const html=entry?.content||'',fileName=entry?.name||'index.html';
+ const renderedHtml=useMemo(()=>renderWorkspaceHtml(files,entryFileId),[files,entryFileId]);const doc=()=>iframeRef.current?.contentDocument||null;
+ const persistNow=useCallback(()=>saveDraft({files:filesRef.current,activeFileId:activeRef.current,entryFileId:entryRef.current,device}),[device]);
+ const queueAutosave=useCallback(()=>{if(saveTimer.current!==null)clearTimeout(saveTimer.current);saveTimer.current=window.setTimeout(()=>{saveTimer.current=null;persistNow()},350)},[persistNow]);
+ const updateEntry=(content:string)=>{const id=entryRef.current;setFiles(p=>p.map(f=>f.id===id?{...f,content,updatedAt:Date.now()}:f));queueAutosave()};
+ const syncFromCanvas=()=>{const d=doc();if(!d)return null;const source=serializeWorkspaceDocument(d);updateEntry(source);return source};
+ const applySelection=useCallback((id:string|null,d:Document|null=doc())=>{selectedIdRef.current=id;setSelectedId(id);if(!d){setAnalysis(null);return}d.querySelectorAll<HTMLElement>('[data-vpb-selected]').forEach(x=>x.removeAttribute('data-vpb-selected'));d.querySelectorAll<HTMLElement>('[data-vpb-added-draggable]').forEach(x=>{x.removeAttribute('data-vpb-added-draggable');x.removeAttribute('draggable')});const el=byId(d,id);if(el){el.setAttribute('data-vpb-selected','');if(!['HTML','BODY'].includes(el.tagName)&&!el.hasAttribute('draggable')){el.setAttribute('draggable','true');el.setAttribute('data-vpb-added-draggable','')}}setAnalysis(el?analyzeElement(el):null)},[]);
+ const refresh=useCallback(()=>{const d=doc();if(!d)return;setTree(buildTree(d));const el=byId(d,selectedIdRef.current);setAnalysis(el?analyzeElement(el):null);tick(x=>x+1)},[]);
+ const snap=(selection:string|null=selectedIdRef.current)=>{const d=doc();return d?{html:serializeWorkspaceDocument(d),selectedId:selection}:null};
+ const flushGroupedMutation=()=>{const g=grouped.current;if(!g)return;if(g.timer!==null)clearTimeout(g.timer);grouped.current=null;const after=snap();if(after){history.push(after);updateEntry(after.html)}refresh()};
+ useEffect(()=>{if(html)history.reset({html,selectedId:null})},[]);
+ useEffect(()=>{const flush=()=>persistNow(),visibility=()=>{if(document.visibilityState==='hidden')flush()};window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',visibility);return()=>{window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',visibility);if(saveTimer.current!==null)clearTimeout(saveTimer.current);if(grouped.current?.timer!=null)clearTimeout(grouped.current.timer)}},[persistNow]);
+ const loadFile=async(f:File)=>{flushGroupedMutation();const type=fileTypeFromName(f.name);if(!type)return;const text=await f.text(),wf=makeWorkspaceFile(f.name,type,text);if(type==='html'){setFiles([wf]);setEntryFileId(wf.id);entryRef.current=wf.id}else setFiles(p=>[...p,wf]);setActiveFileId(wf.id);activeRef.current=wf.id;setModeState(type==='html'?'visual':'raw');selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([]);if(type==='html')history.reset({html:text,selectedId:null});queueAutosave()};
+ const select=(id:string|null)=>{flushGroupedMutation();applySelection(id)};
+ const commitVisual=(before:{html:string;selectedId:string|null}|null)=>{if(before)history.push(before);const after=snap();if(after){history.push(after);updateEntry(after.html)}refresh()};
+ const mutate=(fn:(el:HTMLElement)=>void)=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();fn(el);applySelection(selectedIdRef.current,d);commitVisual(before)};
+ const mutateGrouped=(key:string,fn:(el:HTMLElement)=>void)=>{const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!el)return;if(grouped.current&&grouped.current.key!==key)flushGroupedMutation();if(!grouped.current){const before=snap();if(before)history.push(before);grouped.current={key,timer:null}}fn(el);applySelection(selectedIdRef.current,d);const source=syncFromCanvas();if(source)queueAutosave();const g=grouped.current;if(g){if(g.timer!==null)clearTimeout(g.timer);g.timer=window.setTimeout(flushGroupedMutation,350)}};
+ const finishInsert=(d:Document,node:HTMLElement|null,before:{html:string;selectedId:string|null}|null)=>{indexDocument(d);const next=node?.getAttribute(ID)||selectedIdRef.current;applySelection(next,d);commitVisual(before);setTimeout(()=>node?.scrollIntoView({block:'center',behavior:'smooth'}))};
+ const insertElement=(kind:string,position:InsertPosition='inside',targetId:string|null=selectedIdRef.current)=>{flushGroupedMutation();const d=doc();if(!d||!d.body)return;const before=snap(),node=createCatalogElement(d,kind);if(!node)return;insertNode(d,byId(d,targetId),node,position);finishInsert(d,node,before)};
+ const insertHtml=(snippet:string,position:InsertPosition='inside',targetId:string|null=selectedIdRef.current)=>{flushGroupedMutation();const d=doc();if(!d||!d.body||!snippet.trim())return;const before=snap(),{fragment,firstElement}=parseHtmlSnippet(d,snippet);if(!fragment.childNodes.length)return;insertNode(d,byId(d,targetId),fragment,position);finishInsert(d,firstElement,before)};
+ const moveBlock=(sourceId:string,targetId:string,position:InsertPosition)=>{flushGroupedMutation();const d=doc();if(!d)return;const source=byId(d,sourceId),target=byId(d,targetId);if(!source||!target||source===target||['BODY','HTML'].includes(source.tagName)||source.contains(target))return;const before=snap();insertNode(d,target,source,position);indexDocument(d);applySelection(sourceId,d);commitVisual(before)};
+ const duplicate=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap(),c=duplicateElement(el);c.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));c.removeAttribute(ID);indexDocument(d);const next=c.getAttribute(ID);applySelection(next,d);commitVisual(before)};
+ const copyBlock=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!el)return;const clone=el.cloneNode(true)as HTMLElement;clone.removeAttribute(ID);clone.querySelectorAll(`[${ID}]`).forEach(x=>x.removeAttribute(ID));['data-vpb-selected','data-vpb-hover','data-vpb-added-draggable','draggable'].forEach(a=>clone.removeAttribute(a));clone.querySelectorAll<HTMLElement>('[data-vpb-selected],[data-vpb-hover],[data-vpb-added-draggable]').forEach(x=>['data-vpb-selected','data-vpb-hover','data-vpb-added-draggable','draggable'].forEach(a=>x.removeAttribute(a)));copiedBlock.current=clone.outerHTML;setHasCopiedBlock(true)};
+ const pasteBlock=(where:'before'|'after')=>{flushGroupedMutation();const d=doc(),target=d&&byId(d,selectedIdRef.current);if(!d||!target||!copiedBlock.current||['BODY','HTML'].includes(target.tagName))return;const before=snap(),template=d.createElement('template');template.innerHTML=copiedBlock.current.trim();const clone=template.content.firstElementChild as HTMLElement|null;if(!clone)return;where==='before'?target.before(clone):target.after(clone);indexDocument(d);const next=clone.getAttribute(ID);applySelection(next,d);commitVisual(before)};
+ const copyStyle=()=>{const d=doc(),el=d&&byId(d,selectedIdRef.current);if(el){copiedStyle.current=el.style.cssText;setHasCopiedStyle(true)}};const pasteStyle=()=>{if(hasCopiedStyle)mutate(el=>{el.style.cssText=copiedStyle.current})};const clearInlineStyle=()=>mutate(el=>el.removeAttribute('style'));
+ const remove=()=>{flushGroupedMutation();const d=doc(),el=d&&byId(d,selectedIdRef.current);if(!d||!el)return;const before=snap();if(!deleteElement(el))return;applySelection(null,d);commitVisual(before)};const move=(dir:-1|1)=>mutate(el=>moveElement(el,dir));
+ const restore=(s:{html:string;selectedId:string|null}|null)=>{if(!s)return;updateEntry(s.html);selectedIdRef.current=s.selectedId;setSelectedId(s.selectedId);setAnalysis(null);setTree([])};const undo=()=>{flushGroupedMutation();restore(history.undo())},redo=()=>{flushGroupedMutation();restore(history.redo())};
+ const setDevice=(d:Device)=>{flushGroupedMutation();setDeviceState(d);queueAutosave()},setMode=(m:EditorMode)=>{flushGroupedMutation();setModeState(m);if(m==='visual'&&active?.type!=='html'){setActiveFileId(entryRef.current);activeRef.current=entryRef.current}};
+ const setActiveFile=(id:string)=>{if(filesRef.current.some(f=>f.id===id)){setActiveFileId(id);activeRef.current=id;setModeState('raw');queueAutosave()}};
+ const createFile=(name:string,type:WorkspaceFileType)=>{const clean=name.trim();if(!clean||filesRef.current.some(f=>f.name.toLowerCase()===clean.toLowerCase()))return false;const f=makeWorkspaceFile(clean,type,defaultContent(type));setFiles(p=>[...p,f]);setActiveFileId(f.id);activeRef.current=f.id;setModeState('raw');queueAutosave();return true};
+ const renameFile=(id:string,name:string)=>{const clean=name.trim(),target=filesRef.current.find(f=>f.id===id),type=fileTypeFromName(clean);if(!target||!clean||!type||type!==target.type||filesRef.current.some(f=>f.id!==id&&f.name.toLowerCase()===clean.toLowerCase()))return false;const old=target.name;setFiles(p=>p.map(f=>f.id===id?{...f,name:clean,updatedAt:Date.now()}:f).map(f=>f.type==='html'?{...f,content:f.content.replaceAll(`href="${old}"`,`href="${clean}"`).replaceAll(`src="${old}"`,`src="${clean}"`)}:f));queueAutosave();return true};
+ const duplicateFile=(id:string)=>{const f=filesRef.current.find(x=>x.id===id);if(!f)return;const dot=f.name.lastIndexOf('.'),baseName=dot>0?f.name.slice(0,dot):f.name,ext=dot>0?f.name.slice(dot):'',names=new Set(filesRef.current.map(x=>x.name.toLowerCase()));let i=1,name=`${baseName}-copy${ext}`;while(names.has(name.toLowerCase()))name=`${baseName}-copy-${++i}${ext}`;const n=makeWorkspaceFile(name,f.type,f.content);setFiles(p=>[...p,n]);setActiveFileId(n.id);activeRef.current=n.id;setModeState('raw');queueAutosave()};
+ const deleteFile=(id:string)=>{const f=filesRef.current.find(x=>x.id===id);if(!f||filesRef.current.length===1)return;if(id===entryRef.current){const next=filesRef.current.find(x=>x.id!==id&&x.type==='html');if(!next)return;setEntryFileId(next.id);entryRef.current=next.id}const remaining=filesRef.current.filter(x=>x.id!==id);setFiles(remaining);if(activeRef.current===id){const next=remaining.find(x=>x.id===entryRef.current)||remaining[0];setActiveFileId(next.id);activeRef.current=next.id}queueAutosave()};
+ const updateActiveFileContent=(content:string)=>{const id=activeRef.current;setFiles(p=>p.map(f=>f.id===id?{...f,content,updatedAt:Date.now()}:f));if(id===entryRef.current){selectedIdRef.current=null;setSelectedId(null);setAnalysis(null);setTree([])}queueAutosave()};
+ const setEntryFile=(id:string)=>{if(filesRef.current.some(f=>f.id===id&&f.type==='html')){setEntryFileId(id);entryRef.current=id;setActiveFileId(id);activeRef.current=id;setSelectedId(null);queueAutosave()}};
+ const exportCurrentFile=()=>{const f=filesRef.current.find(x=>x.id===activeRef.current);if(f)downloadFile(f)},exportHtml=()=>{const f=filesRef.current.find(x=>x.id===entryRef.current);if(f)downloadFile(f)};
+ return{iframeRef,html,renderedHtml,fileName,files,activeFileId,entryFileId,mode,selectedId,analysis,tree,device,canUndo:history.canUndo,canRedo:history.canRedo,hasCopiedBlock,hasCopiedStyle,loadFile,select,setDevice,setMode,setActiveFile,createFile,renameFile,duplicateFile,deleteFile,updateActiveFileContent,setEntryFile,mutate,mutateGrouped,flushGroupedMutation,insertElement,insertHtml,moveBlock,duplicate,copyBlock,pasteBlock,copyStyle,pasteStyle,clearInlineStyle,remove,move,undo,redo,exportHtml,exportCurrentFile,refresh}
 }
