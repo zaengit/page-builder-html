@@ -24,6 +24,7 @@ test('click insertion remains available as mobile fallback',async({page})=>{
   const frame=page.frameLocator('iframe[title="HTML canvas"]');
   await frame.locator('#one').click({position:{x:10,y:10}});
   await page.getByRole('button',{name:'Elements'}).click();
-  await page.getByTitle('Insert Section').click();
+  const sheet=page.locator('div.absolute.inset-0.z-40');
+  await sheet.getByTitle('Insert Section').click();
   await expect(frame.locator('#one > section')).toHaveCount(1);
 });
