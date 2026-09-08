@@ -68,7 +68,7 @@ test('undo snapshot survives switching to raw mode and autosave',async({page})=>
   await inline.blur();
   await expect(frame.locator('#hero')).toHaveCSS('margin-top','41px');
   await page.keyboard.press('Control+z');
-  await expect(frame.locator('#hero')).toHaveCSS('margin-top','0px');
+  await expect(frame.locator('#hero')).not.toHaveAttribute('style');
 
   await page.getByTestId('mode-raw').click();
   await expect(page.getByTestId('raw-editor')).toBeVisible();
