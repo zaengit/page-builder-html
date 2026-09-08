@@ -11,8 +11,9 @@ type PropertiesTab='content'|'attributes'|'css';
 
 export function PropertiesPanel({e,className=''}:{e:EditorContextValue;className?:string}){
   const hasText=e.analysis?.capabilities.includes('text')||false;
-  const[tab,setTab]=useState<PropertiesTab>(hasText?'content':'attributes');
-  useEffect(()=>{if(tab==='content'&&!hasText)setTab('attributes')},[e.selectedId,hasText]);
+  const[tab,setTab]=useState<PropertiesTab>('css');
+  useEffect(()=>{if(!e.selectedId)return;setTab(hasText?'content':'css')},[e.selectedId]);
+  useEffect(()=>{if(tab==='content'&&!hasText)setTab('css')},[hasText,tab]);
   const crumbs:{id:string;tag:string}[]=[];
   const d=e.iframeRef.current?.contentDocument;
   let node=d&&e.selectedId?d.querySelector<HTMLElement>(`[${ID}="${CSS.escape(e.selectedId)}"]`):null;
