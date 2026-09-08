@@ -12,6 +12,8 @@ async function clearAndOpen(page:any){
   return frame;
 }
 
+async function savedDraft(page:any){return page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),key)}
+
 test('visual mutation is preserved when a new workspace file is created',async({page})=>{
   const frame=await clearAndOpen(page);
   await frame.locator('#hero').click();
@@ -26,12 +28,8 @@ test('visual mutation is preserved when a new workspace file is created',async({
   page.once('dialog',d=>d.accept('theme'));
   await page.getByTitle('New CSS').click();
   await expect(page.getByTestId('raw-editor')).toBeVisible();
-  await page.waitForTimeout(500);
 
-  const saved=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),key);
-  const entry=saved.files?.find((f:any)=>f.id===saved.entryFileId);
-  expect(entry?.content).toContain('padding: 37px');
-  expect(saved.files?.some((f:any)=>f.name==='theme.css')).toBe(true);
+  await expect.poll(async()=>{const saved=await savedDraft(page);const entry=saved.files?.find((f:any)=>f.id===saved.entryFileId);return{entry:entry?.content?.includes('padding: 37px')||false,css:saved.files?.some((f:any)=>f.name==='theme.css')||false}}).toEqual({entry:true,css:true});
 });
 
 test('renaming workspace css and js files rewrites entry references',async({page})=>{
@@ -48,11 +46,9 @@ test('renaming workspace css and js files rewrites entry references',async({page
   await page.getByTestId('file-explorer').getByRole('button',{name:/style\.css/}).dblclick();
   page.once('dialog',d=>d.accept('app.js'));
   await page.getByTestId('file-explorer').getByRole('button',{name:/main\.js/}).dblclick();
-  await page.waitForTimeout(500);
 
-  const saved=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),key);
-  const entry=saved.files.find((f:any)=>f.id==='html-1');
-  expect(entry.content).toContain('href="theme.css"');
+  await expect.poll(async()=>{const saved=await savedDraft(page);const entry=saved.files?.find((f:any)=>f.id==='html-1');return entry?.content||''}).toContain('href="theme.css"');
+  const saved=await savedDraft(page);const entry=saved.files.find((f:any)=>f.id==='html-1');
   expect(entry.content).toContain('src="app.js"');
   expect(entry.content).not.toContain('href="style.css"');
   expect(entry.content).not.toContain('src="main.js"');
@@ -72,8 +68,5 @@ test('undo snapshot survives switching to raw mode and autosave',async({page})=>
 
   await page.getByTestId('mode-raw').click();
   await expect(page.getByTestId('raw-editor')).toBeVisible();
-  await page.waitForTimeout(500);
-  const saved=await page.evaluate(key=>JSON.parse(localStorage.getItem(key)||'{}'),key);
-  const entry=saved.files?.find((f:any)=>f.id===saved.entryFileId);
-  expect(entry?.content).not.toContain('margin: 41px');
+  await expect.poll(async()=>{const saved=await savedDraft(page);const entry=saved.files?.find((f:any)=>f.id===saved.entryFileId);return entry?.content?.includes('margin: 41px')??true}).toBe(false);
 });
