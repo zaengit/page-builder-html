@@ -19,6 +19,31 @@ test('Elements defaults to Insert and search filters across groups',async({page}
   await expect(page.getByTitle('Insert Section')).toHaveCount(0);
 });
 
+test('Elements exposes common layout and content building blocks',async({page})=>{
+  await upload(page);
+  await expect(page.getByTitle('Insert Section')).toBeVisible();
+  await expect(page.getByTitle('Insert Flex')).toBeVisible();
+  await expect(page.getByTitle('Insert Column')).toBeVisible();
+  await expect(page.getByTitle('Insert Spacer')).toBeVisible();
+  await expect(page.getByTitle('Insert Divider')).toBeVisible();
+  await page.getByRole('tab',{name:'Content'}).click();
+  await expect(page.getByTitle('Insert Heading 1')).toBeVisible();
+  await expect(page.getByTitle('Insert Paragraph')).toBeVisible();
+  await expect(page.getByTitle('Insert Blockquote')).toBeVisible();
+  await expect(page.getByTitle('Insert Bullet List')).toBeVisible();
+  await expect(page.getByTitle('Insert Numbered List')).toBeVisible();
+  await expect(page.getByTitle('Insert Table')).toBeVisible();
+});
+
+test('Inside insertion falls back to a valid sibling for block elements',async({page})=>{
+  const frame=await upload(page);
+  await frame.locator('#title').click();
+  await page.getByRole('tab',{name:'Layout'}).click();
+  await page.getByTitle('Insert Section').click();
+  await expect(frame.locator('#title > section')).toHaveCount(0);
+  await expect(frame.locator('#hero > h1 + section')).toHaveCount(1);
+});
+
 test('Tree tab exposes imported DOM and can select an existing node',async({page})=>{
   const frame=await upload(page);
   await page.getByRole('tab',{name:'Tree'}).click();
