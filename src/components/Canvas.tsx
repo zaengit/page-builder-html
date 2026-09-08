@@ -6,12 +6,12 @@ import type{EditorContextValue,InsertPosition}from'../types/editor';
 
 const widths={desktop:'100%',tablet:'768px',mobile:'375px'};
 const voidTags=new Set(['AREA','BASE','BR','COL','EMBED','HR','IMG','INPUT','LINK','META','PARAM','SOURCE','TRACK','WBR','IFRAME']);
-const edgeChildTags=new Set(['A','ABBR','B','BDI','BDO','BUTTON','CITE','CODE','DEL','EM','I','IMG','INPUT','INS','KBD','LABEL','MARK','PICTURE','Q','S','SAMP','SMALL','SPAN','STRONG','SUB','SUP','SVG','TIME','U','VIDEO']);
+const structuralTags=new Set(['ARTICLE','ASIDE','DIV','FIGURE','FOOTER','FORM','HEADER','MAIN','NAV','SECTION']);
 type ToolbarPos={left:number;top:number;tag:string}|null;
 
 function dropPosition(target:HTMLElement,clientY:number):InsertPosition{if(voidTags.has(target.tagName))return clientY<target.getBoundingClientRect().top+target.getBoundingClientRect().height/2?'before':'after';const rect=target.getBoundingClientRect();const ratio=rect.height?((clientY-rect.top)/rect.height):.5;if(ratio<.25)return'before';if(ratio>.75)return'after';return'inside'}
 function editingTarget(target:EventTarget|null){const el=target as HTMLElement|null;return !!el&&(el.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(el.tagName))}
-function selectionTarget(target:HTMLElement,clientX:number,clientY:number){if(!edgeChildTags.has(target.tagName))return target;let parent=target.parentElement;while(parent&&!['BODY','HTML'].includes(parent.tagName)){if(parent.hasAttribute(ID)){const r=parent.getBoundingClientRect();const edge=Math.min(Math.abs(clientX-r.left),Math.abs(r.right-clientX),Math.abs(clientY-r.top),Math.abs(r.bottom-clientY));if(edge<=8)return parent}parent=parent.parentElement}return target}
+function selectionTarget(target:HTMLElement,clientX:number,clientY:number){if(structuralTags.has(target.tagName))return target;let parent=target.parentElement;while(parent&&!['BODY','HTML'].includes(parent.tagName)){if(structuralTags.has(parent.tagName)&&parent.hasAttribute(ID)){const r=parent.getBoundingClientRect();const edge=Math.min(Math.abs(clientX-r.left),Math.abs(r.right-clientX),Math.abs(clientY-r.top),Math.abs(r.bottom-clientY));if(edge<=10)return parent}parent=parent.parentElement}return target}
 
 export function Canvas({e}:{e:EditorContextValue}){
   const[toolbar,setToolbar]=useState<ToolbarPos>(null);
